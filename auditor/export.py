@@ -1,5 +1,3 @@
-"""Convert a completed audit report to a portable JSON representation."""
-
 import json
 import math
 from datetime import date, datetime, time, timedelta
