@@ -1,8 +1,11 @@
+import json
 import unittest
 
+import numpy as np
 import pandas as pd
 
 from auditor.data_type import detect_type_issues, suggest_types
+from auditor.export import to_export_json
 from auditor.pipeline import prepare_audit, run_auditor
 
 
@@ -150,6 +153,29 @@ class ConfirmedTypesTest(unittest.TestCase):
         self.assertEqual(clean["finding_totals"]["by_severity"], {
             "error": 0, "warning": 0,
         })
+
+    def test_export_has_missing_counts_and_json_safe_values(self):
+        df = pd.DataFrame({
+            "amount": [np.inf, None, np.float64(2.0)],
+            "when": [pd.Timestamp("2024-01-01"), pd.NaT, pd.Timestamp("2024-01-03")],
+        }, index=pd.date_range("2024-02-01", periods=3))
+        report = run_auditor(df, {"amount": "float", "when": "date"})
+
+        self.assertNotIn("missing_mask", report)
+        self.assertEqual(report["missing_totals"], {
+            "total": 2,
+            "by_column": {"amount": 1, "when": 1},
+        })
+
+        exported = json.loads(to_export_json(report))
+        self.assertEqual(exported["missing_totals"], report["missing_totals"])
+        self.assertNotIn("missing_mask", exported)
+        self.assertEqual(exported["numeric_summary"][0]["statistic"], "count")
+        self.assertEqual(exported["numeric_summary"][0]["values"]["amount"], 1.0)
+        invalid = exported["checks"]["type"][0]["findings"][0]
+        self.assertIsNone(invalid["value"])
+        self.assertEqual(invalid["row_index"], "2024-02-01T00:00:00")
+        self.assertEqual(exported["checks"]["type"][0]["metrics"]["finding_count"], 1)
 
 
 if __name__ == "__main__":

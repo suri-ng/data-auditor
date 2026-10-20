@@ -4,7 +4,6 @@ from auditor.category import detect_category_issues
 from auditor.data_type import convert_confirmed_values, detect_type_issues, suggest_types
 from auditor.outliers import detect_outliers_iqr
 from auditor.profiler import (
-    _missing_mask,
     detect_duplicate_rows,
     detect_missing_values,
     profile_dataset,
@@ -43,12 +42,19 @@ def run_auditor(df, confirmed_types):
         "category": detect_category_issues(df, confirmed_types),
         "iqr": detect_outliers_iqr(df, confirmed_types),
     }
+    missing_by_column = {
+        result["column"]: result["metrics"]["finding_count"]
+        for result in checks["missing"]
+    }
 
     return {
         "dataset_summary": dataset_summary,
         "column_profile": column_profile,
         "numeric_summary": numeric_summary,
-        "missing_mask": _missing_mask(df),
+        "missing_totals": {
+            "total": sum(missing_by_column.values()),
+            "by_column": missing_by_column,
+        },
         "confirmed_types": confirmed_types.copy(),
         "checks": checks,
         "finding_totals": finding_totals(checks),
