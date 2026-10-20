@@ -3,7 +3,6 @@ from pathlib import Path
 
 import pandas as pd
 
-from auditor.config import load_rules
 from auditor.data_type import validate_expected_type
 from auditor.loader import load_csv
 from auditor.pipeline import run_auditor
@@ -13,7 +12,15 @@ from auditor.profiler import _missing_mask
 PROJECT_ROOT = Path(__file__).resolve().parent
 DEFAULT_DIRTY = PROJECT_ROOT / "examples" / "dirty_index_flights.csv"
 DEFAULT_CLEAN = PROJECT_ROOT / "examples" / "clean_index_flights.csv"
-DEFAULT_TYPE_RULES = PROJECT_ROOT / "examples" / "flight_type_rules.py"
+CONFIRMED_TYPES = {
+    "index": "integer",
+    "src": "string",
+    "flight": "string",
+    "sched_dep_time": "date",
+    "act_dep_time": "date",
+    "sched_arr_time": "date",
+    "act_arr_time": "date",
+}
 
 
 def _prepare_pair(dirty_df, clean_df, key_column):
@@ -53,15 +60,15 @@ def actual_dirty_cells(dirty_df, clean_df):
     return cells
 
 
-def actual_type_error_cells(dirty_df, clean_df, type_rules, changed_cells):
-    """Return changed cells where dirty fails a type rule that clean passes."""
+def actual_type_error_cells(dirty_df, clean_df, confirmed_types, changed_cells):
+    """Return changed cells where dirty fails a confirmed type that clean passes."""
     cells = set()
-    for column, rule in type_rules.items():
+    for column, confirmed_type in confirmed_types.items():
         if column not in dirty_df.columns:
             continue
 
-        dirty_validation = validate_expected_type(dirty_df[column], rule)
-        clean_validation = validate_expected_type(clean_df[column], rule)
+        dirty_validation = validate_expected_type(dirty_df[column], confirmed_type)
+        clean_validation = validate_expected_type(clean_df[column], confirmed_type)
         dirty_invalid_rows = set(dirty_validation["invalid_rows"])
         clean_invalid_rows = set(clean_validation["invalid_rows"])
 
@@ -100,12 +107,7 @@ def type_predictions(type_report):
     cells = set()
     for result in type_report:
         column = result["column"]
-        if result["source"] == "user_rules":
-            rows = result.get("invalid_rows", [])
-        elif result["source"] == "inference":
-            rows = result.get("incompatible_rows") or []
-        else:
-            rows = []
+        rows = result["invalid_rows"]
         cells.update((row_key, column) for row_key in rows)
     return cells
 
@@ -114,16 +116,6 @@ def category_predictions(category_report):
     cells = set()
     for column_report in category_report:
         column = column_report["column"]
-
-        validation = column_report.get("validation", {})
-        for record in validation.get("invalid_records", {}).values():
-            cells.update((row_key, column) for row_key in record["rows"])
-
-        formatting = validation.get("format_inconsistencies", {})
-        cells.update(
-            (row_key, column)
-            for row_key in formatting.get("affected_rows", [])
-        )
 
         rare_report = column_report.get("rare_categories", {})
         for record in rare_report.get("rare_records", {}).values():
@@ -191,30 +183,18 @@ def main():
     parser.add_argument("--dirty", default=DEFAULT_DIRTY, help="Dirty CSV path.")
     parser.add_argument("--clean", default=DEFAULT_CLEAN, help="Clean CSV path.")
     parser.add_argument("--key", default="index", help="Unique row-key column.")
-    parser.add_argument(
-        "--type-rules",
-        default=DEFAULT_TYPE_RULES,
-        help="Python file defining type_rules. Defaults to the flight rules."
-    )
-    parser.add_argument("--category-rules", help="Python file defining category_rules.")
     args = parser.parse_args()
 
     dirty_df, clean_df = _prepare_pair(
         load_csv(args.dirty), load_csv(args.clean), args.key
     )
-    type_rules = load_rules(args.type_rules, "type_rules")
-    category_rules = (
-        load_rules(args.category_rules, "category_rules")
-        if args.category_rules else None
-    )
-
-    auditor_report = run_auditor(dirty_df, type_rules, category_rules)
+    auditor_report = run_auditor(dirty_df, CONFIRMED_TYPES)
     actual = actual_dirty_cells(dirty_df, clean_df)
     actual_missing_errors = actual_missing_error_cells(
         dirty_df, clean_df, actual
     )
     actual_type_errors = actual_type_error_cells(
-        dirty_df, clean_df, type_rules, actual
+        dirty_df, clean_df, CONFIRMED_TYPES, actual
     )
     predictions = {
         "Missing-value detection": missing_predictions(auditor_report["missing_mask"]),

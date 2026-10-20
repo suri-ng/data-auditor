@@ -58,46 +58,33 @@ def display_missing_report(df, missing_report):
 
 
 def display_type_issues(df, type_report):
-    print("\nDATA-TYPE VALIDATION/SUGGESTION")
+    print("\nDATA-TYPE VALIDATION")
     print("=" * 60, end="")
     
     for result in type_report:
-        source = result["source"]
-
         print(f"\nColumn: {result['column']}")
-        if source == "configuration_error":
-            print(f"Error: {result['error']}")
+        print(f"Current pandas type: {result['current_pandas_type']}")
+        print(f"Confirmed type: {result['expected_type']}")
+        print(f"Invalid count: {result['invalid_count']}")
+        print(f"Invalid percentage: {result['invalid_percentage']}%")
+        print(f"Invalid rows: {result['invalid_rows']}")
+        print(f"Invalid values: {result['invalid_values']}")
 
-        elif source == "user_rules":
-            print("-- User-rule validation --")
-            print(f"Current pandas type: {result['current_pandas_type']}")
-            print(f"Expected type: {result['expected_type']}")
-            print(f"Invalid count: {result['invalid_count']}")
-            print(f"Invalid percentage: {result['invalid_percentage']}%")
-            print(f"Invalid rows: {result['invalid_rows']}")
-            print(f"Invalid values: {result['invalid_values']}")
-        
-        else:
-            print("-- Automatic type inference --")
-            print(f"Current pandas type: {result['current_pandas_type']}")
-            print(f"Suggested type: {result['suggested_type']}")
-            print(f"Classification: {result['classification']}")
-            print(f"Reason: {result['reason']}")
-            if result['confidence'] != None:
-                print(f"Confidence: {result['confidence']}%")
 
-            if result['values_tested'] != 0:
-                print(f"Values tested: {result['values_tested']}")
-            
-            if result['compatible_count'] != 0:
-                print(f"Compatible count: {result['compatible_count']}")
-                print(f"Incompatible count: {result['incompatible_count']}")
-                print(f"Incompatible rows: {result['incompatible_rows']}")
-                print(f"Incompatible values: {result['incompatible_values']}")
-
-            if result['multiple_candidates']:
-                candidates = result.get("candidates", [])
-                print("Candidates: " + ", ".join(c['type'] for c in candidates))
+def display_type_suggestions(type_suggestions):
+    print("\nSUGGESTED DATA TYPES")
+    print("=" * 60)
+    for result in type_suggestions:
+        confidence = result["confidence"]
+        confidence_text = f" ({confidence}% compatible)" if confidence is not None else ""
+        print(f"{result['column']}: {result['suggested_type']}{confidence_text}")
+        print(f"  Reason: {result['reason']}")
+        if result["multiple_candidates"]:
+            candidates = ", ".join(
+                f"{candidate['type']} ({candidate['confidence']}%)"
+                for candidate in result["candidates"]
+            )
+            print(f"  Alternatives: {candidates}")
 
 
 def display_category_issues(df, issues_report):
@@ -108,7 +95,7 @@ def display_category_issues(df, issues_report):
         print(f"\nColumn: {result['column']}")
         if "classification" in result:
             print(f"Classification: {result['classification']}")
-            print(f"Error: {result['error']}") # error
+            print(f"Reason: {result['reason']}")
             continue
 
         if "is_categorical" in result:
@@ -116,35 +103,6 @@ def display_category_issues(df, issues_report):
             print(f"Classification: {is_categorical['classification']}")
             print(f"Reason: {is_categorical['reason']}")
             continue
-
-        if "validation" in result:
-            validation = result["validation"]
-            print("-- Allowed categories Validation --")
-            print(f"Classification: {validation['classification']}")
-            print(f"Reason: {validation['reason']}")
-            print(f"Values tested: {validation['values_tested']}")
-            print(f"Invalid values count: {validation['invalid_count']}")
-
-            if validation['invalid_count'] != 0:
-                print(f"Invalid percentage: {validation['invalid_percentage']}")
-                print("Invalid values:")
-                for value, info in validation["invalid_records"].items():
-                    print(f"   {value}: count={info['count']}, rows={info['rows']}")  
-
-            format = validation["format_inconsistencies"]
-            print("-- Format inconsistencies Detection --")
-            print(f"Classification: {format['classification']}")
-            print(f"Reason: {format['reason']}")
-            if format['classification'] != 'no_formatting_inconsistencies':
-                if format['classification'] == 'capitalization_inconsistency':
-                    print(f"Cap inconsistency count: {format['capitalization_count']}")
-                elif format['classification'] == 'whitespace_inconsistency':
-                    print(f"Whitespace inconsistency count: {format['whitespace_count']}")
-                else:
-                    print(f"Cap inconsistency count: {format['capitalization_count']}")
-                    print(f"Whitespace inconsistency count: {format['whitespace_count']}")
-                print(f"Affected values: {format['affected_values']}")
-                print(f"Affected rows: {format['affected_rows']}")
 
         if "high_cardinality" in result:
             high_cardinality = result["high_cardinality"]

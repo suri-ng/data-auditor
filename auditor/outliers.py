@@ -1,26 +1,31 @@
 import pandas as pd
 
+from auditor.profiler import _missing_series_mask
 
-def detect_outliers_iqr(df):
+
+def detect_outliers_iqr(df, confirmed_types):
     results = []
 
     for column in df.columns:
         series = df[column]
-        is_numeric = pd.api.types.is_numeric_dtype(series)
-        is_boolean = pd.api.types.is_bool_dtype(series)
-        non_missing_series = series.dropna()
-        values_tested = len(non_missing_series)
+        selected_type = confirmed_types[column]
 
-        if not is_numeric or is_boolean:
+        if selected_type not in {"integer", "float"}:
             results.append({
                 "column": column,
                 "check_performed": False,
-                "values_tested": values_tested,
+                "values_tested": 0,
                 "outlier_count": 0,
                 "classification": "not_numeric_skipped",
-                "reason": "IQR outlier detection applies only to numeric columns."
+                "reason": "IQR outlier detection applies only to confirmed integer or float columns."
             })
             continue
+
+        converted = pd.to_numeric(series.mask(_missing_series_mask(series)), errors="coerce")
+        if selected_type == "integer":
+            converted = converted.where(converted % 1 == 0)
+        non_missing_series = converted.dropna()
+        values_tested = len(non_missing_series)
 
         if values_tested == 0:
             results.append({
@@ -38,7 +43,7 @@ def detect_outliers_iqr(df):
         iqr = q3 - q1
         lower_bound = q1 - (1.5 * iqr)
         upper_bound = q3 + (1.5 * iqr)
-        outlier_mask = (series < lower_bound) | (series > upper_bound)
+        outlier_mask = (converted < lower_bound) | (converted > upper_bound)
         outlier_series = series[outlier_mask]
         outlier_count = int(outlier_mask.sum())
 

@@ -2,11 +2,15 @@ import pandas as pd
 
 from auditor.profiler import _missing_series_mask
 
-def validate_expected_type(series, rule):
+SUPPORTED_TYPES = {"string", "integer", "float", "boolean", "date"}
+
+
+def validate_expected_type(series, expected_type):
     """
     Validate the data type of a DataFrame column against expected types.
     """
-    expected_type = rule["type"].lower()
+    if expected_type not in SUPPORTED_TYPES:
+        raise ValueError(f"Unsupported confirmed type: {expected_type}")
     non_missing = ~_missing_series_mask(series)
 
     if expected_type == "integer":
@@ -14,30 +18,22 @@ def validate_expected_type(series, rule):
 
         invalid_map = non_missing & (converted.isna() | converted % 1 != 0)
 
-    elif expected_type in ["float", "numeric"]:
+    elif expected_type == "float":
         converted = pd.to_numeric(series, errors="coerce")
 
         invalid_map = non_missing & converted.isna()
 
     elif expected_type == "date":
-        date_format = rule.get("format", "mixed")
-        converted = pd.to_datetime(series, format=date_format, errors="coerce")
+        converted = pd.to_datetime(series, format="mixed", errors="coerce")
 
         invalid_map = non_missing & converted.isna()
 
     elif expected_type == "boolean":
-        default_boolean_values = {
+        boolean_values = {
                 "true", "false",
                 "yes", "no",
                 "0", "1"
             }
-
-        boolean_values = rule.get("allowed_values", default_boolean_values)
-
-        boolean_values = {
-            str(value).strip().lower()
-            for value in boolean_values
-        }
 
         normalized = (
             series.astype("string")
@@ -50,11 +46,6 @@ def validate_expected_type(series, rule):
     elif expected_type == "string":
         invalid_map = pd.Series(
             False, index=series.index
-        )
-
-    else:
-        raise ValueError(
-            f"Unsupported expected type: {expected_type}"
         )
 
     invalid_count = int(invalid_map.sum())
@@ -140,7 +131,7 @@ def type_inference(series, STRONG_THRESHOLD=90, MIN_THRESHOLD=60):
     candidates = []
 
     # 1. boolean
-    bool_result=validate_expected_type(series, {"type": "boolean"})
+    bool_result=validate_expected_type(series, "boolean")
     bool_compatibility=round(100-(bool_result["invalid_percentage"]),2)
     if bool_compatibility >= MIN_THRESHOLD:
         candidates.append({
@@ -151,10 +142,10 @@ def type_inference(series, STRONG_THRESHOLD=90, MIN_THRESHOLD=60):
         })
 
     # 2. numeric
-    numeric_result = validate_expected_type(series, {"type": "numeric"})
+    numeric_result = validate_expected_type(series, "float")
     numeric_compatibility=round(100-(numeric_result["invalid_percentage"]),2)
 
-    integer_result = validate_expected_type(series, {"type": "integer"})
+    integer_result = validate_expected_type(series, "integer")
     integer_compatibility=round(100-(integer_result["invalid_percentage"]),2)
 
     if numeric_compatibility >= MIN_THRESHOLD:
@@ -187,10 +178,7 @@ def type_inference(series, STRONG_THRESHOLD=90, MIN_THRESHOLD=60):
         evidence.append("values have a date-like structure")
 
     if supporting_evidence_date:
-        date_result = validate_expected_type(series, {
-                "type": "date",
-                "format": "mixed"
-            })
+        date_result = validate_expected_type(series, "date")
         date_compatibility=round(100-(date_result["invalid_percentage"]),2) #evidence 2
 
         if evidence:
@@ -260,7 +248,7 @@ def type_inference(series, STRONG_THRESHOLD=90, MIN_THRESHOLD=60):
             )
             selection_reason = "Multiple types were compatible, but the column name provides supporting evidence for date data."
 
-        elif (candidates[0][confidence] - candidates[1][confidence] >= 5):
+        elif (candidates[0]["confidence"] - candidates[1]["confidence"] >= 5):
             selected_candidate = candidates[0]
             selection_reason = "The strongest candidate exceeded the next candidate by at least five percentage points."
 
@@ -321,30 +309,30 @@ def type_inference(series, STRONG_THRESHOLD=90, MIN_THRESHOLD=60):
             "reason": selection_reason
         }
 
-def detect_type_issues(df, type_rules):
-    results=[]
+def suggest_types(df):
+    """Suggest types for review, without validating the dataset."""
+    return [type_inference(df[column]) for column in df.columns]
 
-    if type_rules is None:
-        type_rules = {}
 
-    # check invalid column name in type_rules
-    for column in type_rules:
-        if column not in df.columns:
-            results.append({
-                "column": column,
-                "source": "configuration_error",
-                "error": "Column specified in data type rules was not found in the dataset."
-            })
+def detect_type_issues(df, confirmed_types):
+    """Validate every column against a type confirmed before the audit."""
+    if not isinstance(confirmed_types, dict):
+        raise ValueError("Confirmed types must be a column-to-type dictionary.")
 
-    for column in df.columns:
-        if column in type_rules:
-            rule = type_rules[column]
-            result = validate_expected_type(df[column], rule)
-            result["source"] = "user_rules"
-        else:
-            result = type_inference(df[column])
-            result["source"] = "inference"
+    missing = [column for column in df.columns if column not in confirmed_types]
+    extra = [column for column in confirmed_types if column not in df.columns]
+    invalid = {
+        column: selected_type
+        for column, selected_type in confirmed_types.items()
+        if not isinstance(selected_type, str) or selected_type not in SUPPORTED_TYPES
+    }
+    if missing or extra or invalid:
+        raise ValueError(
+            f"Invalid confirmed types: missing columns={missing}, "
+            f"unknown columns={extra}, unsupported choices={invalid}."
+        )
 
-        results.append(result)  
-        
-    return results
+    return [
+        validate_expected_type(df[column], confirmed_types[column])
+        for column in df.columns
+    ]

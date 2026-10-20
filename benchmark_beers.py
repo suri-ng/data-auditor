@@ -1,7 +1,6 @@
 import argparse
 from pathlib import Path
 
-from auditor.config import load_rules
 from auditor.loader import load_csv
 from auditor.pipeline import run_auditor
 from benchmark_flights import (
@@ -21,7 +20,19 @@ from benchmark_flights import (
 PROJECT_ROOT = Path(__file__).resolve().parent
 DEFAULT_DIRTY = PROJECT_ROOT / "examples" / "dirty_index_beers.csv"
 DEFAULT_CLEAN = PROJECT_ROOT / "examples" / "clean_index_beers.csv"
-DEFAULT_TYPE_RULES = PROJECT_ROOT / "examples" / "beer_type_rules.py"
+CONFIRMED_TYPES = {
+    "index": "integer",
+    "id": "integer",
+    "beer_name": "string",
+    "style": "string",
+    "ounces": "float",
+    "abv": "float",
+    "ibu": "float",
+    "brewery_id": "integer",
+    "brewery_name": "string",
+    "city": "string",
+    "state": "string",
+}
 
 
 def main():
@@ -31,33 +42,18 @@ def main():
     parser.add_argument("--dirty", default=DEFAULT_DIRTY, help="Dirty CSV path.")
     parser.add_argument("--clean", default=DEFAULT_CLEAN, help="Clean CSV path.")
     parser.add_argument("--key", default="index", help="Unique row-key column.")
-    parser.add_argument(
-        "--type-rules",
-        default=DEFAULT_TYPE_RULES,
-        help="Python file defining type_rules. Defaults to the beer rules."
-    )
-    parser.add_argument(
-        "--category-rules",
-        help="Optional Python file defining category_rules."
-    )
     args = parser.parse_args()
 
     dirty_df, clean_df = _prepare_pair(
         load_csv(args.dirty), load_csv(args.clean), args.key
     )
-    type_rules = load_rules(args.type_rules, "type_rules")
-    category_rules = (
-        load_rules(args.category_rules, "category_rules")
-        if args.category_rules else None
-    )
-
-    auditor_report = run_auditor(dirty_df, type_rules, category_rules)
+    auditor_report = run_auditor(dirty_df, CONFIRMED_TYPES)
     actual = actual_dirty_cells(dirty_df, clean_df)
     actual_missing_errors = actual_missing_error_cells(
         dirty_df, clean_df, actual
     )
     actual_type_errors = actual_type_error_cells(
-        dirty_df, clean_df, type_rules, actual
+        dirty_df, clean_df, CONFIRMED_TYPES, actual
     )
     predictions = {
         "Missing-value detection": missing_predictions(auditor_report["missing_mask"]),
