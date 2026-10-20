@@ -1,3 +1,6 @@
+from datetime import date, datetime
+
+import numpy as np
 import pandas as pd
 
 from auditor.profiler import _missing_series_mask
@@ -5,48 +8,45 @@ from auditor.profiler import _missing_series_mask
 SUPPORTED_TYPES = {"string", "integer", "float", "boolean", "date"}
 
 
-def validate_expected_type(series, expected_type):
-    """
-    Validate the data type of a DataFrame column against expected types.
-    """
+def convert_confirmed_values(series, expected_type):
+    """Convert compatible values, leaving missing and incompatible values null."""
     if expected_type not in SUPPORTED_TYPES:
         raise ValueError(f"Unsupported confirmed type: {expected_type}")
+    missing = _missing_series_mask(series)
+
+    if expected_type in {"integer", "float"}:
+        converted = pd.to_numeric(series.mask(missing), errors="coerce")
+        converted = converted.replace([np.inf, -np.inf], np.nan)
+        non_numeric_scalars = series.map(
+            lambda value: isinstance(value, (bool, np.bool_, date, datetime, np.datetime64))
+        )
+        converted = converted.mask(non_numeric_scalars)
+        if expected_type == "integer":
+            converted = converted.where(converted % 1 == 0)
+        return converted
+
+    if expected_type == "date":
+        text = series.astype("string").str.strip()
+        numeric_only = pd.to_numeric(text, errors="coerce").notna()
+        return pd.to_datetime(
+            text.mask(missing | numeric_only), format="mixed", errors="coerce"
+        )
+
+    if expected_type == "boolean":
+        normalized = series.astype("string").str.strip().str.casefold()
+        return normalized.mask(missing).map({
+            "true": True, "yes": True, "1": True,
+            "false": False, "no": False, "0": False,
+        })
+
+    return series.astype("string").mask(missing)
+
+
+def validate_expected_type(series, expected_type):
+    """Report nonmissing values incompatible with the confirmed type."""
+    converted = convert_confirmed_values(series, expected_type)
     non_missing = ~_missing_series_mask(series)
-
-    if expected_type == "integer":
-        converted = pd.to_numeric(series, errors="coerce")
-
-        invalid_map = non_missing & (converted.isna() | converted % 1 != 0)
-
-    elif expected_type == "float":
-        converted = pd.to_numeric(series, errors="coerce")
-
-        invalid_map = non_missing & converted.isna()
-
-    elif expected_type == "date":
-        converted = pd.to_datetime(series, format="mixed", errors="coerce")
-
-        invalid_map = non_missing & converted.isna()
-
-    elif expected_type == "boolean":
-        boolean_values = {
-                "true", "false",
-                "yes", "no",
-                "0", "1"
-            }
-
-        normalized = (
-            series.astype("string")
-            .str.strip()
-            .str.lower()
-        )
-
-        invalid_map = non_missing & ~normalized.isin(boolean_values)
-
-    elif expected_type == "string":
-        invalid_map = pd.Series(
-            False, index=series.index
-        )
+    invalid_map = non_missing & converted.isna()
 
     invalid_count = int(invalid_map.sum())
     non_missing_count = int(non_missing.sum())

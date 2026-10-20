@@ -21,11 +21,35 @@ class ConfirmedTypesTest(unittest.TestCase):
         numeric = run_auditor(df, {"amount": "integer"})
         self.assertEqual(numeric["type_report"][0]["invalid_values"], ["bad"])
         self.assertTrue(numeric["outliers_report"][0]["check_performed"])
+        self.assertEqual(numeric["outliers_report"][0]["values_tested"], 4)
         self.assertEqual(numeric["outliers_report"][0]["outlier_values"], ["100"])
+        self.assertEqual(numeric["numeric_summary"].loc["count", "amount"], 4)
 
         text = run_auditor(df, {"amount": "string"})
         self.assertEqual(text["type_report"][0]["invalid_count"], 0)
         self.assertFalse(text["outliers_report"][0]["check_performed"])
+        self.assertTrue(text["numeric_summary"].empty)
+
+    def test_numeric_values_are_invalid_in_a_confirmed_date_column(self):
+        df = pd.DataFrame({
+            "event_date": pd.Series(
+                [20240101, "20240102", "2024-01-03", pd.Timestamp("2024-01-04")],
+                dtype="object",
+            )
+        })
+
+        report = run_auditor(df, {"event_date": "date"})
+        self.assertEqual(report["type_report"][0]["invalid_rows"], [0, 1])
+        self.assertEqual(report["type_report"][0]["invalid_count"], 2)
+        self.assertFalse(report["outliers_report"][0]["check_performed"])
+
+    def test_nonfinite_and_boolean_values_are_invalid_for_numeric_types(self):
+        df = pd.DataFrame({"value": pd.Series(["1.5", "inf", True], dtype="object")})
+
+        report = run_auditor(df, {"value": "float"})
+        self.assertEqual(report["type_report"][0]["invalid_rows"], [1, 2])
+        self.assertEqual(report["outliers_report"][0]["values_tested"], 1)
+        self.assertEqual(report["numeric_summary"].loc["count", "value"], 1)
 
     def test_suggestions_are_separate_from_validation(self):
         df = pd.DataFrame({"amount": ["1", "2"]})

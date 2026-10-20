@@ -1,5 +1,7 @@
+import pandas as pd
+
 from auditor.category import detect_category_issues
-from auditor.data_type import detect_type_issues, suggest_types
+from auditor.data_type import convert_confirmed_values, detect_type_issues, suggest_types
 from auditor.outliers import detect_outliers_iqr
 from auditor.profiler import _missing_mask, detect_missing_values, profile_dataset
 
@@ -18,10 +20,21 @@ def run_auditor(df, confirmed_types):
     """Run checks after every column has a confirmed type."""
     type_report = detect_type_issues(df, confirmed_types)
     dataset_summary, column_profile = profile_dataset(df)
+    column_profile["confirmed_type"] = column_profile["column"].map(confirmed_types)
+    numeric_columns = {
+        column: convert_confirmed_values(df[column], confirmed_types[column])
+        for column in df.columns
+        if confirmed_types[column] in {"integer", "float"}
+    }
+    numeric_summary = (
+        pd.DataFrame(numeric_columns).describe().round(2)
+        if numeric_columns else pd.DataFrame()
+    )
 
     return {
         "dataset_summary": dataset_summary,
         "column_profile": column_profile,
+        "numeric_summary": numeric_summary,
         "missing_report": detect_missing_values(df),
         "missing_mask": _missing_mask(df),
         "confirmed_types": confirmed_types.copy(),

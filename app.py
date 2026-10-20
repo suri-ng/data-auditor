@@ -6,6 +6,7 @@ from auditor.pipeline import prepare_audit, run_auditor
 from auditor.reporter import (
     display_category_issues,
     display_missing_report,
+    display_numeric_summary,
     display_outliers_report,
     display_profile,
     display_type_issues,
@@ -74,6 +75,7 @@ def main():
 
         display_missing_report(df, report["missing_report"])
         display_type_issues(df, report["type_report"])
+        display_numeric_summary(report["numeric_summary"])
         display_category_issues(df, report["category_report"])
         display_outliers_report(df, report["outliers_report"])
     except (FileNotFoundError, ValueError) as error:

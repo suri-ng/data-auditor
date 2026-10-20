@@ -1,6 +1,4 @@
-import pandas as pd
-
-from auditor.profiler import _missing_series_mask
+from auditor.data_type import convert_confirmed_values
 
 
 def detect_outliers_iqr(df, confirmed_types):
@@ -21,9 +19,7 @@ def detect_outliers_iqr(df, confirmed_types):
             })
             continue
 
-        converted = pd.to_numeric(series.mask(_missing_series_mask(series)), errors="coerce")
-        if selected_type == "integer":
-            converted = converted.where(converted % 1 == 0)
+        converted = convert_confirmed_values(series, selected_type)
         non_missing_series = converted.dropna()
         values_tested = len(non_missing_series)
 

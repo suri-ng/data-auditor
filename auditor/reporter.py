@@ -20,15 +20,12 @@ def display_profile(df, dataset_summary, column_profile):
     print("=" * 60)
     print(column_profile.to_string(index=False))
 
+def display_numeric_summary(numeric_summary):
     print("\nNUMERIC SUMMARY")
     print("=" * 60)
-
-    numeric_columns = df.select_dtypes(include="number")
-
-    if numeric_columns.empty:
-        print("No numeric columns were detected.")
+    if numeric_summary.empty:
+        print("No confirmed numeric columns were available.")
     else:
-        numeric_summary = numeric_columns.describe().round(2)
         print(numeric_summary.to_string())
 
 
