@@ -5,6 +5,7 @@ from auditor.loader import load_csv
 from auditor.pipeline import prepare_audit, run_auditor
 from auditor.reporter import (
     display_category_issues,
+    display_duplicate_report,
     display_missing_report,
     display_numeric_summary,
     display_outliers_report,
@@ -73,11 +74,13 @@ def main():
         confirmed_types = confirm_types_in_terminal(preliminary["type_suggestions"])
         report = run_auditor(df, confirmed_types)
 
-        display_missing_report(df, report["missing_report"])
-        display_type_issues(df, report["type_report"])
+        checks = report["checks"]
+        display_missing_report(df, checks["missing"])
+        display_duplicate_report(checks["duplicates"])
+        display_type_issues(df, checks["type"])
         display_numeric_summary(report["numeric_summary"])
-        display_category_issues(df, report["category_report"])
-        display_outliers_report(df, report["outliers_report"])
+        display_category_issues(df, checks["category"])
+        display_outliers_report(df, checks["iqr"])
     except (FileNotFoundError, ValueError) as error:
         print(f"\nError: {error}")
 

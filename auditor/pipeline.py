@@ -3,7 +3,13 @@ import pandas as pd
 from auditor.category import detect_category_issues
 from auditor.data_type import convert_confirmed_values, detect_type_issues, suggest_types
 from auditor.outliers import detect_outliers_iqr
-from auditor.profiler import _missing_mask, detect_missing_values, profile_dataset
+from auditor.profiler import (
+    _missing_mask,
+    detect_duplicate_rows,
+    detect_missing_values,
+    profile_dataset,
+)
+from auditor.results import finding_totals
 
 
 def prepare_audit(df):
@@ -30,15 +36,20 @@ def run_auditor(df, confirmed_types):
         pd.DataFrame(numeric_columns).describe().round(2)
         if numeric_columns else pd.DataFrame()
     )
+    checks = {
+        "type": type_report,
+        "missing": detect_missing_values(df),
+        "duplicates": [detect_duplicate_rows(df)],
+        "category": detect_category_issues(df, confirmed_types),
+        "iqr": detect_outliers_iqr(df, confirmed_types),
+    }
 
     return {
         "dataset_summary": dataset_summary,
         "column_profile": column_profile,
         "numeric_summary": numeric_summary,
-        "missing_report": detect_missing_values(df),
         "missing_mask": _missing_mask(df),
         "confirmed_types": confirmed_types.copy(),
-        "type_report": type_report,
-        "category_report": detect_category_issues(df, confirmed_types),
-        "outliers_report": detect_outliers_iqr(df, confirmed_types),
+        "checks": checks,
+        "finding_totals": finding_totals(checks),
     }

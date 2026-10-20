@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 
 from auditor.profiler import _missing_series_mask
+from auditor.results import check_result, findings_for_mask
 
 SUPPORTED_TYPES = {"string", "integer", "float", "boolean", "date"}
 
@@ -47,24 +48,38 @@ def validate_expected_type(series, expected_type):
     converted = convert_confirmed_values(series, expected_type)
     non_missing = ~_missing_series_mask(series)
     invalid_map = non_missing & converted.isna()
-
-    invalid_count = int(invalid_map.sum())
     non_missing_count = int(non_missing.sum())
-
+    findings = findings_for_mask(
+        series,
+        invalid_map,
+        check="type",
+        severity="error",
+        message=f"Value is incompatible with confirmed type {expected_type}.",
+    )
     if non_missing_count == 0:
-        invalid_percentage = 0.0
+        status = "skipped"
+        classification = "no_nonmissing_values"
+        reason = "No nonmissing values are available for type validation."
+    elif findings:
+        status = "complete"
+        classification = "invalid_values_detected"
+        reason = "Some nonmissing values are incompatible with the confirmed type."
     else:
-        invalid_percentage = round((invalid_count / non_missing_count) * 100, 2)
-    
-    return {
-        "column": series.name,
-        "current_pandas_type": str(series.dtype),
-        "expected_type": expected_type,
-        "invalid_count": invalid_count,
-        "invalid_percentage": invalid_percentage,
-        "invalid_rows": series.index[invalid_map].tolist(),
-        "invalid_values": series[invalid_map].tolist()
-    }
+        status = "complete"
+        classification = "all_values_valid"
+        reason = "All nonmissing values are compatible with the confirmed type."
+
+    return check_result(
+        "type", series.name, status, classification, reason,
+        values_total=len(series),
+        values_present=non_missing_count,
+        values_tested=non_missing_count,
+        findings=findings,
+        extra_metrics={
+            "current_pandas_type": str(series.dtype),
+            "expected_type": expected_type,
+        },
+    )
 
 def type_inference(series, STRONG_THRESHOLD=90, MIN_THRESHOLD=60):
     """
@@ -132,7 +147,7 @@ def type_inference(series, STRONG_THRESHOLD=90, MIN_THRESHOLD=60):
 
     # 1. boolean
     bool_result=validate_expected_type(series, "boolean")
-    bool_compatibility=round(100-(bool_result["invalid_percentage"]),2)
+    bool_compatibility=round(100-(bool_result["metrics"]["finding_percentage"]),2)
     if bool_compatibility >= MIN_THRESHOLD:
         candidates.append({
             "type": "boolean",
@@ -143,10 +158,10 @@ def type_inference(series, STRONG_THRESHOLD=90, MIN_THRESHOLD=60):
 
     # 2. numeric
     numeric_result = validate_expected_type(series, "float")
-    numeric_compatibility=round(100-(numeric_result["invalid_percentage"]),2)
+    numeric_compatibility=round(100-(numeric_result["metrics"]["finding_percentage"]),2)
 
     integer_result = validate_expected_type(series, "integer")
-    integer_compatibility=round(100-(integer_result["invalid_percentage"]),2)
+    integer_compatibility=round(100-(integer_result["metrics"]["finding_percentage"]),2)
 
     if numeric_compatibility >= MIN_THRESHOLD:
         if integer_compatibility == numeric_compatibility:
@@ -179,7 +194,7 @@ def type_inference(series, STRONG_THRESHOLD=90, MIN_THRESHOLD=60):
 
     if supporting_evidence_date:
         date_result = validate_expected_type(series, "date")
-        date_compatibility=round(100-(date_result["invalid_percentage"]),2) #evidence 2
+        date_compatibility=round(100-(date_result["metrics"]["finding_percentage"]),2) #evidence 2
 
         if evidence:
             evidence_message = "" + " and ".join(evidence) + "."
@@ -293,10 +308,10 @@ def type_inference(series, STRONG_THRESHOLD=90, MIN_THRESHOLD=60):
             "suggested_type": selected_candidate["type"],
             "confidence": confidence,
             "values_tested": values_tested,
-            "compatible_count": values_tested - selection_validation["invalid_count"],
-            "incompatible_count": selection_validation["invalid_count"],
-            "incompatible_rows": selection_validation["invalid_rows"],
-            "incompatible_values": selection_validation["invalid_values"],
+            "compatible_count": values_tested - selection_validation["metrics"]["finding_count"],
+            "incompatible_count": selection_validation["metrics"]["finding_count"],
+            "incompatible_rows": [finding["row_index"] for finding in selection_validation["findings"]],
+            "incompatible_values": [finding["value"] for finding in selection_validation["findings"]],
             "candidates": [
                 {
                     "type": candidate["type"],

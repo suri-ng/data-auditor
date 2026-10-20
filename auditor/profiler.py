@@ -1,5 +1,7 @@
 import pandas as pd
 
+from auditor.results import check_result, findings_for_mask
+
 
 MISSING_MARKERS = {"nan", "none", "null", "n/a", "empty"}
 
@@ -34,13 +36,49 @@ def profile_dataset(df):
 
 
 def detect_missing_values(df):
-    """Calculate missing-value counts and percentages for each column."""
+    """Return one standardized missing-value check per column."""
     missing = _missing_mask(df)
-    missing_report = pd.DataFrame({
-        "column": df.columns,
-        "missing_count": missing.sum().values,
-        "missing_percentage": (missing.mean() * 100).round(2).values
-    })
-    return missing_report.sort_values(
-        by="missing_percentage", ascending=False
-    ).reset_index(drop=True)
+    results = []
+    for column in df.columns:
+        series = df[column]
+        findings = findings_for_mask(
+            series, missing[column], check="missing", severity="warning",
+            message="Value is missing or matches a configured missing marker.",
+        )
+        results.append(check_result(
+            "missing", column, "complete",
+            "missing_values_detected" if findings else "no_missing_values",
+            "Some values are missing." if findings else "No missing values were found.",
+            values_total=len(series),
+            values_present=len(series) - len(findings),
+            values_tested=len(series),
+            findings=findings,
+        ))
+    return results
+
+
+def detect_duplicate_rows(df):
+    """Return a dataset-level check for rows duplicated after the first copy."""
+    duplicate_mask = df.duplicated()
+    findings = [
+        {
+            "check": "duplicates",
+            "column": None,
+            "row_position": position,
+            "row_index": df.index[position],
+            "value": None,
+            "severity": "warning",
+            "message": "Row duplicates an earlier row in the dataset.",
+        }
+        for position, duplicated in enumerate(duplicate_mask.tolist())
+        if duplicated
+    ]
+    return check_result(
+        "duplicates", None, "complete",
+        "duplicate_rows_detected" if findings else "no_duplicate_rows",
+        "Some rows duplicate earlier rows." if findings else "No duplicate rows were found.",
+        values_total=len(df),
+        values_present=len(df),
+        values_tested=len(df),
+        findings=findings,
+    )

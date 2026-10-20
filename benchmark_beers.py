@@ -55,11 +55,12 @@ def main():
     actual_type_errors = actual_type_error_cells(
         dirty_df, clean_df, CONFIRMED_TYPES, actual
     )
+    checks = auditor_report["checks"]
     predictions = {
-        "Missing-value detection": missing_predictions(auditor_report["missing_mask"]),
-        "Data-type detection": type_predictions(auditor_report["type_report"]),
-        "Category detection": category_predictions(auditor_report["category_report"]),
-        "IQR outlier detection": outlier_predictions(auditor_report["outliers_report"]),
+        "Missing-value detection": missing_predictions(checks["missing"]),
+        "Data-type detection": type_predictions(checks["type"]),
+        "Category detection": category_predictions(checks["category"]),
+        "IQR outlier detection": outlier_predictions(checks["iqr"]),
     }
 
     print("\nAUDITOR BENCHMARK: INDEX BEERS")

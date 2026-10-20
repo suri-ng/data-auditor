@@ -69,8 +69,8 @@ def actual_type_error_cells(dirty_df, clean_df, confirmed_types, changed_cells):
 
         dirty_validation = validate_expected_type(dirty_df[column], confirmed_type)
         clean_validation = validate_expected_type(clean_df[column], confirmed_type)
-        dirty_invalid_rows = set(dirty_validation["invalid_rows"])
-        clean_invalid_rows = set(clean_validation["invalid_rows"])
+        dirty_invalid_rows = {finding["row_index"] for finding in dirty_validation["findings"]}
+        clean_invalid_rows = {finding["row_index"] for finding in clean_validation["findings"]}
 
         for row_key in dirty_invalid_rows - clean_invalid_rows:
             cell = (row_key, column)
@@ -95,42 +95,28 @@ def actual_missing_error_cells(dirty_df, clean_df, changed_cells):
     }
 
 
-def missing_predictions(mask):
+def check_predictions(results):
     return {
-        (row_key, column)
-        for column in mask.columns
-        for row_key in mask.index[mask[column]]
+        (finding["row_index"], finding["column"])
+        for result in results
+        for finding in result["findings"]
     }
 
 
-def type_predictions(type_report):
-    cells = set()
-    for result in type_report:
-        column = result["column"]
-        rows = result["invalid_rows"]
-        cells.update((row_key, column) for row_key in rows)
-    return cells
+def missing_predictions(results):
+    return check_predictions(results)
 
 
-def category_predictions(category_report):
-    cells = set()
-    for column_report in category_report:
-        column = column_report["column"]
-
-        rare_report = column_report.get("rare_categories", {})
-        for record in rare_report.get("rare_records", {}).values():
-            cells.update((row_key, column) for row_key in record["rows"])
-
-    return cells
+def type_predictions(results):
+    return check_predictions(results)
 
 
-def outlier_predictions(outliers_report):
-    cells = set()
-    for result in outliers_report:
-        column = result["column"]
-        for record in result.get("outlier_records", {}).values():
-            cells.update((row_key, column) for row_key in record["rows"])
-    return cells
+def category_predictions(results):
+    return check_predictions(results)
+
+
+def outlier_predictions(results):
+    return check_predictions(results)
 
 
 def calculate_metrics(predicted_cells, actual_cells):
@@ -196,11 +182,12 @@ def main():
     actual_type_errors = actual_type_error_cells(
         dirty_df, clean_df, CONFIRMED_TYPES, actual
     )
+    checks = auditor_report["checks"]
     predictions = {
-        "Missing-value detection": missing_predictions(auditor_report["missing_mask"]),
-        "Data-type detection": type_predictions(auditor_report["type_report"]),
-        "Category detection": category_predictions(auditor_report["category_report"]),
-        "IQR outlier detection": outlier_predictions(auditor_report["outliers_report"]),
+        "Missing-value detection": missing_predictions(checks["missing"]),
+        "Data-type detection": type_predictions(checks["type"]),
+        "Category detection": category_predictions(checks["category"]),
+        "IQR outlier detection": outlier_predictions(checks["iqr"]),
     }
 
     print("\nAUDITOR BENCHMARK: INDEX FLIGHTS")

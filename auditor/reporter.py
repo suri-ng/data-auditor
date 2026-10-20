@@ -1,11 +1,7 @@
-
-from auditor.profiler import _missing_mask
+"""Terminal views of the structured audit results."""
 
 
 def display_profile(df, dataset_summary, column_profile):
-    """
-    Print the dataset preview and profile to the terminal.
-    """
     print("\nDATASET PREVIEW")
     print("=" * 60)
     print(df.head())
@@ -19,53 +15,6 @@ def display_profile(df, dataset_summary, column_profile):
     print("\nCOLUMN PROFILE")
     print("=" * 60)
     print(column_profile.to_string(index=False))
-
-def display_numeric_summary(numeric_summary):
-    print("\nNUMERIC SUMMARY")
-    print("=" * 60)
-    if numeric_summary.empty:
-        print("No confirmed numeric columns were available.")
-    else:
-        print(numeric_summary.to_string())
-
-
-def display_missing_report(df, missing_report):
-    """
-    Display the missing-value report in the terminal.
-    """
-    print("\nMISSING-VALUE REPORT")
-    print("=" * 60)
-
-    missing = _missing_mask(df)
-    total_missing = int(missing.sum().sum())
-    rows_with_missing = int(missing.any(axis=1).sum())
-
-    print(f"Total missing cells: {total_missing}")
-    print(f"Rows containing missing values: {rows_with_missing}")
-
-    columns_with_missing = missing_report[
-        missing_report["missing_count"] > 0
-    ]
-
-    if columns_with_missing.empty:
-        print("\nNo missing values were detected.")
-    else:
-        print("\nColumns with missing values:")
-        print(columns_with_missing.to_string(index=False))
-
-
-def display_type_issues(df, type_report):
-    print("\nDATA-TYPE VALIDATION")
-    print("=" * 60, end="")
-    
-    for result in type_report:
-        print(f"\nColumn: {result['column']}")
-        print(f"Current pandas type: {result['current_pandas_type']}")
-        print(f"Confirmed type: {result['expected_type']}")
-        print(f"Invalid count: {result['invalid_count']}")
-        print(f"Invalid percentage: {result['invalid_percentage']}%")
-        print(f"Invalid rows: {result['invalid_rows']}")
-        print(f"Invalid values: {result['invalid_values']}")
 
 
 def display_type_suggestions(type_suggestions):
@@ -84,56 +33,48 @@ def display_type_suggestions(type_suggestions):
             print(f"  Alternatives: {candidates}")
 
 
-def display_category_issues(df, issues_report):
-    print("\nUNUSUAL CATEGORY DETECTION")
-    print("=" * 60, end="")
-    
-    for result in issues_report:
-        print(f"\nColumn: {result['column']}")
-        if "classification" in result:
-            print(f"Classification: {result['classification']}")
-            print(f"Reason: {result['reason']}")
-            continue
-
-        if "is_categorical" in result:
-            is_categorical = result["is_categorical"]
-            print(f"Classification: {is_categorical['classification']}")
-            print(f"Reason: {is_categorical['reason']}")
-            continue
-
-        if "high_cardinality" in result:
-            high_cardinality = result["high_cardinality"]
-            print("-- High category cardinality detected --")
-            print(f"Classification: {high_cardinality['classification']}")
-            print(f"Reason: {high_cardinality['reason']}")
-            print(f"Values tested: {high_cardinality['values_tested']}")
-            print(f"Unique count: {high_cardinality['unique_count']}")
-            print(f"Unique-to-All ratio: {high_cardinality['cardinality_ratio']}")
-            continue
-
-        if "rare_categories" in result:
-            rare_categories = result["rare_categories"]
-            print("-- Rare categories Detection --")
-            print(f"Classification: {rare_categories['classification']}")
-            print(f"Reason: {rare_categories['reason']}")
-            print(f"Rare category count: {rare_categories['rare_category_count']}")
-            print("Rare values:")
-            for value, info in rare_categories["rare_records"].items():
-                print(f"   {value}: count={info['count']}, rows={info['rows']}")  
+def display_numeric_summary(numeric_summary):
+    print("\nNUMERIC SUMMARY")
+    print("=" * 60)
+    if numeric_summary.empty:
+        print("No confirmed numeric columns were available.")
+    else:
+        print(numeric_summary.to_string())
 
 
-def display_outliers_report(df, outliers_report):
-    print("\nIQR OUTLIER DETECTION")
-    print("=" * 60, end="")
-    for result in outliers_report:
-        print(f"\nColumn: {result['column']}")
+def display_check_results(title, results):
+    print(f"\n{title}")
+    print("=" * 60)
+    for result in results:
+        print(f"\nColumn: {result['column'] if result['column'] is not None else 'whole dataset'}")
+        print(f"Status: {result['status']}")
         print(f"Classification: {result['classification']}")
         print(f"Reason: {result['reason']}")
-        print(f"Values tested: {result['values_tested']}")
-        if not result["check_performed"]:
-            continue
-        for label, key in [("Q1", "q1"), ("Q3", "q3"), ("IQR", "iqr"), ("Lower bound", "lower_bound"), ("Upper bound", "upper_bound"), ("Outlier count", "outlier_count")]:
-            print(f"{label}: {result[key]}")
-        print(f"Outlier percentage: {result['outlier_percentage']}%")
-        for value, info in result["outlier_records"].items():
-            print(f"   {value}: count={info['count']}, rows={info['rows']}")
+        for name, value in result["metrics"].items():
+            print(f"{name}: {value}")
+        for finding in result["findings"]:
+            print(
+                f"  Row {finding['row_position']} "
+                f"(index {finding['row_index']}): {finding['value']!r} "
+                f"- {finding['message']}"
+            )
+
+
+def display_type_issues(df, results):
+    display_check_results("DATA-TYPE VALIDATION", results)
+
+
+def display_missing_report(df, results):
+    display_check_results("MISSING-VALUE REPORT", results)
+
+
+def display_duplicate_report(results):
+    display_check_results("DUPLICATE-ROW REPORT", results)
+
+
+def display_category_issues(df, results):
+    display_check_results("UNUSUAL CATEGORY DETECTION", results)
+
+
+def display_outliers_report(df, results):
+    display_check_results("IQR OUTLIER DETECTION", results)
