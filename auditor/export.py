@@ -6,6 +6,8 @@ from decimal import Decimal
 import numpy as np
 import pandas as pd
 
+from auditor.pdf_export import to_export_pdf
+
 
 def _json_safe(value):
     """Convert supported pandas and source scalar values without repr fallbacks."""

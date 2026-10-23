@@ -29,6 +29,10 @@ class ConfirmedTypesTest(unittest.TestCase):
         self.assertEqual(iqr_check["metrics"]["values_tested"], 4)
         self.assertEqual([finding["value"] for finding in iqr_check["findings"]], ["100"])
         self.assertEqual(numeric["numeric_summary"].loc["count", "amount"], 4)
+        self.assertEqual(numeric["numeric_summary"].loc["mean", "amount"], 32.5)
+        self.assertEqual(numeric["numeric_summary"].loc["q1", "amount"], 10)
+        self.assertEqual(numeric["numeric_summary"].loc["median_q2", "amount"], 10)
+        self.assertEqual(numeric["numeric_summary"].loc["q3", "amount"], 32.5)
 
         text = run_auditor(df, {"amount": "string"})
         self.assertEqual(text["checks"]["type"][0]["metrics"]["finding_count"], 0)
@@ -172,6 +176,10 @@ class ConfirmedTypesTest(unittest.TestCase):
         self.assertNotIn("missing_mask", exported)
         self.assertEqual(exported["numeric_summary"][0]["statistic"], "count")
         self.assertEqual(exported["numeric_summary"][0]["values"]["amount"], 1.0)
+        self.assertIn(
+            "median_q2",
+            [entry["statistic"] for entry in exported["numeric_summary"]],
+        )
         invalid = exported["checks"]["type"][0]["findings"][0]
         self.assertIsNone(invalid["value"])
         self.assertEqual(invalid["row_index"], "2024-02-01T00:00:00")

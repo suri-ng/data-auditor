@@ -32,7 +32,11 @@ def run_auditor(df, confirmed_types):
         if confirmed_types[column] in {"integer", "float"}
     }
     numeric_summary = (
-        pd.DataFrame(numeric_columns).describe().round(2)
+        pd.DataFrame(numeric_columns).describe().round(2).rename(index={
+            "25%": "q1",
+            "50%": "median_q2",
+            "75%": "q3",
+        })
         if numeric_columns else pd.DataFrame()
     )
     checks = {
