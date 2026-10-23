@@ -1,6 +1,19 @@
 # Data Auditor
 
-Data Auditor profiles CSV files, suggests types for review, then checks the data against confirmed types. It has a command-line interface and a Streamlit web interface. The backend has separate preparation and audit stages so both interfaces use the same workflow.
+Data Auditor profiles CSV files, suggests types for review, then checks the data against confirmed types. It includes a Streamlit web app and a command-line interface.
+
+**Try the live app:** [dataset-quality-auditor.onrender.com](https://dataset-quality-auditor.onrender.com)
+
+## Use the web app
+
+1. Upload a CSV file.
+2. Review the dataset preview, summary, column profile, and suggested data types.
+3. Confirm or change the type for every column, then select **Confirm types and run audit**.
+4. Review the findings, numeric statistics, and checks. Download the report as JSON or a PDF summary.
+
+The audit checks data types, missing values, duplicate rows, rare categories, and numeric outliers. Category and outlier results are warnings for review; they do not prove that a value is wrong.
+
+**Privacy:** The public app has no login. Uploaded CSV data is processed in memory and is not saved as durable app data, but avoid uploading sensitive or confidential files. The app runs on Render's free instance, which may spin down after inactivity; the first visit after that can take longer to load.
 
 ## Run the Streamlit app
 
@@ -21,9 +34,7 @@ docker build -t data-auditor:local .
 docker run --rm -p 8501:8501 data-auditor:local
 ```
 
-Open <http://localhost:8501>. Stop the app with Ctrl+C. The app processes uploaded files in memory and does not save them as durable application data. Container logs may contain operational details, so avoid uploading sensitive data to a public deployment unless you have added access controls and reviewed the hosting provider's data handling.
-
-To share the app, publish the image to a container registry (for example, GitHub Container Registry), then deploy that image to a container host that supports Docker and exposes port 8501. Configure HTTPS and authentication before making it publicly reachable. Keep the source repository and image registry private if the project or image should not be public. Pin dependency versions before relying on repeatable production builds.
+Open <http://localhost:8501>. Stop the app with Ctrl+C.
 
 ## Run the CLI
 
@@ -67,8 +78,10 @@ Missing and type benchmarks use check-specific ground truth. The category and IQ
 ## Current limits
 
 - Type validation catches incompatible representations; a validly formatted but factually wrong value needs a domain-specific check.
+- Boolean and date values are normalized internally for validation, but the app does not produce a cleaned CSV with standardized values.
+- Numeric-only date values such as `20260101` are rejected as dates; use a delimited date value such as `2026-01-01`.
 - Rare categories and IQR outliers are warnings. They do not establish that a value is erroneous.
 - Duplicate column names are not handled explicitly.
 - The Python report contains pandas DataFrames and source values; use `to_export_json` for a portable download.
-- The app does not include user accounts or authentication. A public deployment should sit behind an authenticated host or access gateway.
+- The app does not include user accounts or authentication. Do not use it for confidential data unless access controls are added.
 - The project dependencies are not pinned to exact versions yet, so rebuilds may install newer releases.
