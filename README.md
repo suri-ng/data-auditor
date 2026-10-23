@@ -1,6 +1,29 @@
 # Data Auditor
 
-Data Auditor profiles CSV files, suggests types for review, then checks the data against confirmed types. The current interface is a command-line application. The backend has separate preparation and audit stages so a Streamlit interface can use the same workflow.
+Data Auditor profiles CSV files, suggests types for review, then checks the data against confirmed types. It has a command-line interface and a Streamlit web interface. The backend has separate preparation and audit stages so both interfaces use the same workflow.
+
+## Run the Streamlit app
+
+Install dependencies from `requirements.txt`, then run:
+
+```powershell
+streamlit run streamlit_app.py
+```
+
+Open the local URL shown by Streamlit, upload a CSV, review the suggested column types, and confirm them to run the audit.
+
+## Run with Docker
+
+Install Docker Desktop, then from the repository root:
+
+```powershell
+docker build -t data-auditor:local .
+docker run --rm -p 8501:8501 data-auditor:local
+```
+
+Open <http://localhost:8501>. Stop the app with Ctrl+C. The app processes uploaded files in memory and does not save them as durable application data. Container logs may contain operational details, so avoid uploading sensitive data to a public deployment unless you have added access controls and reviewed the hosting provider's data handling.
+
+To share the app, publish the image to a container registry (for example, GitHub Container Registry), then deploy that image to a container host that supports Docker and exposes port 8501. Configure HTTPS and authentication before making it publicly reachable. Keep the source repository and image registry private if the project or image should not be public. Pin dependency versions before relying on repeatable production builds.
 
 ## Run the CLI
 
@@ -18,16 +41,17 @@ Supported types are `string`, `integer`, `float`, `boolean`, and `date`. The CLI
 
 ```python
 from auditor.pipeline import prepare_audit, run_auditor
-from auditor.export import to_export_json
+from auditor.export import to_export_json, to_export_pdf
 
 preview = prepare_audit(df)
 # Present preview["type_suggestions"] for review.
 confirmed_types = {"amount": "float", "label": "string"}
 report = run_auditor(df, confirmed_types)
 json_download = to_export_json(report)
+pdf_download = to_export_pdf(report)
 ```
 
-The confirmed mapping must include every column. `report["checks"]` groups type, missing, duplicate, category, and IQR results. `report["missing_totals"]` provides overall and per-column missing counts. Each check result has `check`, `column`, `status`, `classification`, `reason`, `metrics`, and `findings`. Every finding includes a stable `row_position` for `df.iloc` drill-down. See [AUDIT_RETURN_SCHEMA.md](AUDIT_RETURN_SCHEMA.md) for the complete return contract and branch descriptions.
+The confirmed mapping must include every column. `report["checks"]` groups type, missing, duplicate, category, and IQR results. `report["missing_totals"]` provides overall and per-column missing counts. `report["numeric_summary"]` includes count, mean, standard deviation, min, Q1, median/Q2, Q3, and max for confirmed numeric columns. Each check result has `check`, `column`, `status`, `classification`, `reason`, `metrics`, and `findings`. Every finding includes a stable `row_position` for `df.iloc` drill-down. JSON export preserves the structured checks; PDF export gives a readable summary without source row identifiers. See [AUDIT_RETURN_SCHEMA.md](AUDIT_RETURN_SCHEMA.md) for the complete return contract and branch descriptions.
 
 ## Benchmarks
 
@@ -46,4 +70,5 @@ Missing and type benchmarks use check-specific ground truth. The category and IQ
 - Rare categories and IQR outliers are warnings. They do not establish that a value is erroneous.
 - Duplicate column names are not handled explicitly.
 - The Python report contains pandas DataFrames and source values; use `to_export_json` for a portable download.
-- Isolation Forest and the Streamlit interface are not implemented yet.
+- The app does not include user accounts or authentication. A public deployment should sit behind an authenticated host or access gateway.
+- The project dependencies are not pinned to exact versions yet, so rebuilds may install newer releases.
